@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 
 from base import BaseModel
-from model import layers
+from model import layers, utils
 
 
 class M2Det(BaseModel):
@@ -16,5 +16,24 @@ class M2Det(BaseModel):
         self.relu = nn.ReLU(inplace=True)
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
+        tum_layers = []
+        for i in range(8):
+            tum_layers.append(layers.TUM())
+
+        self.tum_layers = nn.Sequential(*tum_layers)
+
     def forward(self, x):
+        x = self.backbone(x)
+        x = self.pool5(x)
+        conv6 = self.conv6(x)
+        conv6 = self.relu(conv6)
+        conv7 = self.conv7(conv6)
+
+        base_feature = layers.FFMv1(conv6, conv7)
+
+        for tum_layer in self.tum_layers:
+            output = tum_layer(base_feature)
+            layers.FFMv2(output)
+
+
         return x

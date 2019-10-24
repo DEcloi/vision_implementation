@@ -1,17 +1,8 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-def get_backbone():
-    pass
-
-
-def upsample_add(x, y, fuse_type='interp'):
-    _, _, H, W = y.size()
-    if fuse_type == 'interp':
-        return F.interpolate(x, size=(H, W), mode='bilinear') + y
-    else:
-        raise NotImplementedError
+from model import utils
 
 
 class Conv(nn.Module):
@@ -30,12 +21,14 @@ class Conv(nn.Module):
 
 
 class FFMv1(nn.Module):
-    def __init__(self, input1, input2):
+    def __init__(self):
         super(FFMv1, self).__init__()
         self.conv1 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
         self.conv2 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
 
-    def forward(self, x):
+    def forward(self, input1, input2):
+        x = torch.cat(input1, utils.upsample_add(input2))
+
         return x
 
 
@@ -51,7 +44,6 @@ class FFMv2(nn.Module):
 class TUM(nn.Module):
     def __init__(self):
         super(TUM, self).__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
 
         encoder = []
         decoder = []
