@@ -2,9 +2,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def get_backbone():
+    pass
+
+
+def upsample_add(x, y, fuse_type='interp'):
+    _, _, H, W = y.size()
+    if fuse_type == 'interp':
+        return F.interpolate(x, size=(H, W), mode='bilinear') + y
+    else:
+        raise NotImplementedError
+
+
 class Conv(nn.Module):
-    def __init__(self, in_planes, out_planes, kernel_size,
-                 stride=1, padding=0, dilation=1,groups=1, relu=True, bn=True, bias=True):
+    def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         super(Conv, self).__init__()
         self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride)
         self.bn = nn.BatchNorm2d(out_planes)
@@ -19,21 +30,22 @@ class Conv(nn.Module):
 
 
 class FFMv1(nn.Module):
-    def __init__(self):
+    def __init__(self, input1, input2):
         super(FFMv1, self).__init__()
-        pass
+        self.conv1 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
+        self.conv2 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
-        pass
+        return x
 
 
 class FFMv2(nn.Module):
     def __init__(self):
         super(FFMv2, self).__init__()
-        pass
+        self.conv = Conv(256, 256, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
-        pass
+        return x
 
 
 class TUM(nn.Module):
@@ -53,21 +65,13 @@ class TUM(nn.Module):
         self.decoder = nn.Sequential(*decoder)
         self.smooth = nn.Sequential(*smooth)
 
-    def _upsample_add(self, x, y, fuse_type='interp'):
-        _, _, H, W = y.size()
-        if fuse_type == 'interp':
-            return F.interpolate(x, size=(H, W), mode='bilinear') + y
-        else:
-            raise NotImplementedError
-
     def forward(self, x):
-        pass
+        return x
 
 
 class SFAM(nn.Module):
     def __init__(self):
         super(SFAM, self).__init__()
-        pass
 
     def forward(self, x):
-        pass
+        return x
