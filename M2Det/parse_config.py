@@ -1,5 +1,7 @@
 import os
 import logging
+import importlib
+
 from pathlib import Path
 from functools import reduce, partial
 from operator import getitem
@@ -86,6 +88,8 @@ class ConfigParser:
         is equivalent to
         `object = module.name(a, b=1)`
         """
+        if isinstance(module, str):
+            module = importlib.import_module(module)
         module_name = self[name]['type']
         module_args = dict(self[name]['args'])
         assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
