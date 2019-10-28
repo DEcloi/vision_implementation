@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from model import utils
 
@@ -8,7 +7,8 @@ from model import utils
 class Conv(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         super(Conv, self).__init__()
-        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride)
+        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
+                              padding=padding, dilation=dilation, groups=groups, bias=bias)
         self.bn = nn.BatchNorm2d(out_planes)
         self.prelu = nn.PReLU()
 
@@ -23,22 +23,17 @@ class Conv(nn.Module):
 class FFMv1(nn.Module):
     def __init__(self):
         super(FFMv1, self).__init__()
-        self.conv1 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
-        self.conv2 = Conv(256, 256, kernel_size=3, stride=2, padding=1)
 
-    def forward(self, input1, input2):
-        x = torch.cat(input1, utils.upsample_add(input2))
-
-        return x
+    def forward(self, x, y):
+        return torch.cat(x, utils.upsample_add(y))
 
 
 class FFMv2(nn.Module):
     def __init__(self):
         super(FFMv2, self).__init__()
-        self.conv = Conv(256, 256, kernel_size=3, stride=2, padding=1)
 
-    def forward(self, x):
-        return x
+    def forward(self, x,y ):
+        return torch.cat(x, y)
 
 
 class TUM(nn.Module):
@@ -58,12 +53,49 @@ class TUM(nn.Module):
         self.smooth = nn.Sequential(*smooth)
 
     def forward(self, x):
-        return x
+        encoder_output = []
+        for i in range(len(self.encoder)):
+            x = self.encoder[i](x)
+            encoder_output.append(x)
+
+        encoder_output.reverse()
+
+        result = []
+        for idx, j in enumerate(encoder_output):
+            if idx == 0:
+                decoder_output = self.decoder(j)
+                result.append(self.smooth(j))
+            else:
+                y = utils.upsample_add(j, decoder_output)
+                decoder_output = self.decoder[idx](y)
+                result.append(self.smooth[idx](y))
+
+        return result
 
 
 class SFAM(nn.Module):
-    def __init__(self):
+    def __init__(self, channel, reduction=16):
         super(SFAM, self).__init__()
+        # SEBlock
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
-        return x
+        output = []
+        for i in range(len(x[0])):
+            for j in range(len(x)):
+                output.append(torch.cat(x[j][i]))
+
+        result = []
+        for i in output:
+            b, c, _, _ = i.size()
+            y = self.avg_pool(i).view(b, c)
+            y = self.fc(y).view(b, c, 1, 1)
+            result.append(y)
+
+        return result
