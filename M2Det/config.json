@@ -1,27 +1,27 @@
 {
-    "name": "Mnist_LeNet",
+    "name": "M2Det",
     "n_gpu": 1,
 
     "arch": {
-        "type": "MnistModel",
+        "type": "M2Det",
         "args": {}
     },
     "data_loader": {
-        "type": "MnistDataLoader",
+        "type": "BDDDataLoader",
         "args":{
-            "data_dir": "data/",
-            "batch_size": 128,
-            "shuffle": true,
-            "validation_split": 0.1,
+            "image_dir": "data/bdd100k/train",
+            "label_dir": "data/bdd100k/labels",
+            "label": "bdd100k_labels_images_train.json",
+            "batch_size": 8,
+            "shuffle": false,
+            "validation_split": 0.0,
             "num_workers": 2
         }
     },
     "optimizer": {
-        "type": "Adam",
+        "module": "model.optimizer",
+        "type": "Ranger",
         "args":{
-            "lr": 0.001,
-            "weight_decay": 0,
-            "amsgrad": true
         }
     },
     "loss": "nll_loss",
@@ -29,22 +29,18 @@
         "accuracy", "top_k_acc"
     ],
     "lr_scheduler": {
-        "type": "StepLR",
+        "type": "CosineAnnealingLR",
         "args": {
-            "step_size": 50,
-            "gamma": 0.1
+            "T_max": 1,
+            "eta_min": 0
         }
     },
     "trainer": {
         "epochs": 100,
-
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
-        
         "monitor": "min val_loss",
-        "early_stop": 10,
-
-        "tensorboard": true
+        "early_stop": 50
     }
 }
