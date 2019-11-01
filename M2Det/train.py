@@ -1,15 +1,15 @@
-import torch
 import argparse
 import collections
+import torch
+import wandb
 import numpy as np
 import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-
 from parse_config import ConfigParser
 from trainer import Trainer
-
+from utils import to_dict, flatten
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -18,7 +18,19 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 np.random.seed(SEED)
 
+
 def main(config):
+
+    # WandB Resume Handling
+    resume = False
+    if config.resume is not None:
+        resume = True
+
+    if not config['debug']:
+        # Send Config to WandB
+        wandb.init(config=flatten(to_dict(config.config)), **flatten(config['wandb']), resume=resume)
+
+    # Logger
     logger = config.get_logger('train')
 
     # setup data_loader instances
@@ -35,10 +47,21 @@ def main(config):
 
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.init_obj('optimizer', config['optimizer']['module'], trainable_params)
+
+    if 'module' not in config['optimizer']:
+        module = torch.optim
+    else:
+        module = config['optimizer']['module']
+    optimizer = config.init_obj('optimizer', module, trainable_params)
+
 
     lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
+    if not config['debug']:
+        # Send model to WandB
+        wandb.watch(model)
+
+    # Trainer
     trainer = Trainer(model, criterion, metrics, optimizer,
                       config=config,
                       data_loader=data_loader,
@@ -61,7 +84,7 @@ if __name__ == '__main__':
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
         CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
-        CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
+        CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size'),
     ]
     config = ConfigParser.from_args(args, options)
     main(config)
