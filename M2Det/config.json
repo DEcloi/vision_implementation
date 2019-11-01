@@ -1,33 +1,47 @@
 {
     "name": "M2Det",
     "n_gpu": 1,
+    "debug": true,
+
+    "wandb": {
+        "project": "m2det",
+        "entity" : "swkim",
+        "id": "run-0"
+    },
 
     "arch": {
         "type": "M2Det",
         "args": {}
     },
+
     "data_loader": {
         "type": "BDDDataLoader",
         "args":{
             "image_dir": "data/bdd100k/train",
             "label_dir": "data/bdd100k/labels",
             "label": "bdd100k_labels_images_train.json",
-            "batch_size": 8,
+            "batch_size": 1,
             "shuffle": false,
             "validation_split": 0.0,
-            "num_workers": 2
+            "num_workers": 16
         }
     },
+
     "optimizer": {
-        "module": "model.optimizer",
-        "type": "Ranger",
+        "type": "Adam",
         "args":{
+            "lr": 0.001,
+            "weight_decay": 0,
+            "amsgrad": true
         }
     },
+
     "loss": "nll_loss",
+
     "metrics": [
         "accuracy", "top_k_acc"
     ],
+
     "lr_scheduler": {
         "type": "CosineAnnealingLR",
         "args": {
@@ -35,12 +49,14 @@
             "eta_min": 0
         }
     },
+
     "trainer": {
         "epochs": 100,
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "min val_loss",
+        "warm_up": 5,
         "early_stop": 50
     }
 }
