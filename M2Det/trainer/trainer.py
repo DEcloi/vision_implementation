@@ -3,6 +3,7 @@ import torch
 import wandb
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker, get_lr
+from torch.autograd import Variable
 
 
 class Trainer(BaseTrainer):
@@ -40,8 +41,14 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
+        print(self.device)
         for batch_idx, data in enumerate(self.data_loader):
-            image, target = data['data'].to(self.device), data['bbox'].to(self.device)
+            # image, target = Variable(data['data'].float().cuda()), Variable(data['bbox'].float().cuda())
+            # print(type(data['data']))
+            # print(type(data['bbox'][0]))
+            image = Variable(data['data'].float().cuda())
+            with torch.no_grad():
+                target = [Variable(i.float().cuda()) for i in data['bbox']]
 
             # Linear Learning Rate Warm-up
             full_batch_idx = ((epoch-1)*len(self.data_loader) + batch_idx)
