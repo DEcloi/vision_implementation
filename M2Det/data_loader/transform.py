@@ -305,9 +305,6 @@ class Rescale(object):
 
         # h and w are swapped for landmarks because for images,
         # x and y axes are axis 1 and 0 respectively
-        print(len(bbox), len(bbox[0]))
-        print(bbox[:])
-        print(bbox[:, :4])
         bbox[:, :4] = bbox[:, :4] * [new_w / w, new_h / h, new_w / w, new_h / h]
         bbox = bbox.astype(float)
         bbox[:, :4] = annotransform(bbox[:, :4], 640, 640)

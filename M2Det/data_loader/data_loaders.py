@@ -2,6 +2,7 @@ import os
 import cv2
 import json
 import torch
+import numpy as np
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -19,8 +20,9 @@ class BDDDataset(Dataset):
 
         labels = ["bike", "bus", "car", "motor", "person", "rider", "traffic light", "traffic sign", "train", "truck"]
 
+        boxes = list()
         self.images = list()
-        self.boxes = list()
+        self.boxes = None
         for frame in frames:
             box = list()
             for label in frame['labels']:
@@ -30,8 +32,11 @@ class BDDDataset(Dataset):
                 if xy['x1'] >= xy['x2'] or xy['y1'] >= xy['y2']:
                     continue
                 box.append([xy['x1'], xy['y1'], xy['x2'], xy['y2'], labels.index(label['category'])])
+            box = np.asarray(box)
             self.images.append(frame['name'])
-            self.boxes.append(box)
+            boxes.append(box)
+
+        self.boxes = np.array(boxes)
 
     def __len__(self):
         return len(self.images)
@@ -56,6 +61,7 @@ class BDDDataset(Dataset):
             boxes.append(sample['bbox'])
 
         images = torch.stack(images, dim=0)
+        # print(images.shape)
 
         return {'data': images, 'bbox': boxes}
 
@@ -68,4 +74,4 @@ class BDDDataLoader(BaseDataLoader):
             # transforms.Normalize((0.1307,), (0.3081,))
         ])
         self.dataset = BDDDataset(image_dir, label_dir, label, transform=trsfm)
-        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
+        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers, collate_fn=self.dataset.collate_fn)
