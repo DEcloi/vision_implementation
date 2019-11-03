@@ -7,9 +7,9 @@ from base import BaseModel
 
 
 def upsample_add(x, y, fuse_type='interp'):
-    _, _, H, W = y.size()
+    _, _, H, W = x.size()
     if fuse_type == 'interp':
-        return F.interpolate(x, size=(H, W), mode='bilinear') + y
+        return F.interpolate(y, size=(H, W), mode='bilinear') + x
     else:
         raise NotImplementedError
 
@@ -19,13 +19,13 @@ class Conv(nn.Module):
         super(Conv, self).__init__()
         self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
                               padding=padding, dilation=dilation, groups=groups, bias=bias)
-        self.bn = nn.BatchNorm2d(out_planes)
-        self.prelu = nn.PReLU()
+        self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         x = self.conv(x)
         x = self.bn(x)
-        x = self.prelu(x)
+        x = self.relu(x)
 
         return x
 
@@ -42,50 +42,86 @@ class FFMv1(nn.Module):
         print(self.reduce(x).shape)
         print(self.up_reduce(y).shape)
         print(F.interpolate(self.up_reduce(y), scale_factor=2, mode='nearest').shape)
-        return torch.cat(F.interpolate(self.up_reduce(y), scale_factor=2, mode='nearest'), self.reduce(x))
+        return torch.cat((self.reduce(x), F.interpolate(self.up_reduce(y), scale_factor=2, mode='nearest')), 1)
 
 
 class FFMv2(nn.Module):
     def __init__(self):
         super(FFMv2, self).__init__()
+        self.conv = Conv(768, 128, kernel_size=1, stride=1)
 
-    def forward(self, x,y ):
-        return torch.cat(x, y)
+    def forward(self, x, y):
+        print(type(x))
+        print(type(y))
+        print(x.shape)
+        print(y.shape)
+        return torch.cat((self.conv(x), y), 1)
 
 
 class TUM(nn.Module):
-    def __init__(self):
+    def __init__(self, layer):
         super(TUM, self).__init__()
 
         encoder = []
         decoder = []
         smooth = []
+        for i in range(5):
+            if layer == 0 and i == 0:
+                encoder.append(Conv(128, 256, kernel_size=3, stride=2, padding=1))
+            else:
+                if i == 4:
+                    encoder.append(Conv(256, 256, kernel_size=3, stride=1, padding=0))
+                else:
+                    encoder.append(Conv(256, 256, kernel_size=3, stride=2, padding=1))
+
+        for i in range(5):
+            if layer == 0 and i == 4:
+                decoder.append(Conv(256, 128, kernel_size=3, stride=1, padding=1))
+            else:
+                decoder.append(Conv(256, 256, kernel_size=3, stride=1, padding=1))
+
         for i in range(6):
-            encoder.append(Conv(256, 256, kernel_size=3, stride=2, padding=1))
-            decoder.append(Conv(256, 256, kernel_size=3, stride=1, padding=0))
-            smooth.append(Conv(256, 256, kernel_size=1, stride=1, padding=0))
+            if layer == 0 and i == 5:
+                smooth.append(Conv(128, 128, kernel_size=1, stride=1, padding=0))
+            else:
+                smooth.append(Conv(256, 128, kernel_size=1, stride=1, padding=0))
 
         self.encoder = nn.Sequential(*encoder)
         self.decoder = nn.Sequential(*decoder)
         self.smooth = nn.Sequential(*smooth)
 
     def forward(self, x):
-        encoder_output = []
+        print("ENCODER")
+        print(x.shape)
+        encoder_output = [x]
         for i in range(len(self.encoder)):
             x = self.encoder[i](x)
+            print(i, x.shape)
             encoder_output.append(x)
 
         encoder_output.reverse()
 
+        print("DECODER")
         result = []
         for idx, j in enumerate(encoder_output):
+            print(idx, j.shape)
             if idx == 0:
-                decoder_output = self.decoder(j)
-                result.append(self.smooth(j))
+                decoder_output = self.decoder[idx](j)
+                print(idx, decoder_output.shape)
+                result.append(self.smooth[idx](j))
+                print(idx, result[idx].shape)
+            elif idx == 5:
+                y = upsample_add(j, decoder_output)
+                print(idx, y.shape)
+                result.append(self.smooth[idx](y))
+                print(idx, result[idx].shape)
             else:
                 y = upsample_add(j, decoder_output)
+                print(idx, y.shape)
                 decoder_output = self.decoder[idx](y)
+                print(idx, decoder_output.shape)
                 result.append(self.smooth[idx](y))
+                print(idx, result[idx].shape)
 
         return result
 
@@ -104,6 +140,7 @@ class SFAM(nn.Module):
 
     def forward(self, x):
         output = []
+        print(type(x))
         for i in range(len(x[0])):
             for j in range(len(x)):
                 output.append(torch.cat(x[j][i]))
@@ -136,6 +173,7 @@ class M2Det(BaseModel):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         self.backbone_list = [n for n in self.backbone]
+        self.backbone_list.pop()
         self.backbone_list.append(self.pool5)
         self.backbone_list.append(self.conv6)
         self.backbone_list.append(self.relu)
@@ -146,9 +184,13 @@ class M2Det(BaseModel):
         self.ffmv1 = FFMv1()
         self.ffmv2 = FFMv2()
 
+        self.top_conv = Conv(768, 128, kernel_size=1, stride=1)
         tum_layers = []
         for i in range(self.num_levels):
-            tum_layers.append(TUM())
+            if i == 0:
+                tum_layers.append(TUM(layer=0))
+            else:
+                tum_layers.append(TUM(layer=1))
 
         self.tum = nn.Sequential(*tum_layers)
         self.sfam = SFAM()
@@ -168,10 +210,11 @@ class M2Det(BaseModel):
     def forward(self, x):
         # Backbone network
         base_feats = list()
-        print(len(self.layer))
+        # print(len(self.layer))
+        # print(x.shape)
         for i in range(len(self.layer)):
-            print(i, x.shape)
             x = self.layer[i](x)
+            # print(i, x.shape)
             if i == 22 or i == 34:
                 base_feats.append(x)
 
@@ -189,8 +232,10 @@ class M2Det(BaseModel):
         input = base_feature
         output = []
         for idx, tum_layer in enumerate(self.tum):
+            if idx == 0:
+                input = self.top_conv(input)
             output.append(tum_layer(input))
-            input = self.ffmv2(base_feature, output[idx])
+            input = self.ffmv2(base_feature, output[idx][-1])
 
         ## SFAM
         x = self.sfam(output)
