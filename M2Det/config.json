@@ -20,7 +20,7 @@
             "image_dir": "data/bdd100k/train",
             "label_dir": "data/bdd100k/labels",
             "label": "bdd100k_labels_images_train.json",
-            "batch_size": 2,
+            "batch_size": 32,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 16
