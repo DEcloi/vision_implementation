@@ -37,11 +37,6 @@ class FFMv1(nn.Module):
         self.up_reduce = Conv(1024, 512, kernel_size=1, stride=1)
 
     def forward(self, x, y):
-        print(x.shape)
-        print(y.shape)
-        print(self.reduce(x).shape)
-        print(self.up_reduce(y).shape)
-        print(F.interpolate(self.up_reduce(y), scale_factor=2, mode='nearest').shape)
         return torch.cat((self.reduce(x), F.interpolate(self.up_reduce(y), scale_factor=2, mode='nearest')), 1)
 
 
@@ -51,10 +46,6 @@ class FFMv2(nn.Module):
         self.conv = Conv(768, 128, kernel_size=1, stride=1)
 
     def forward(self, x, y):
-        print(type(x))
-        print(type(y))
-        print(x.shape)
-        print(y.shape)
         return torch.cat((self.conv(x), y), 1)
 
 
@@ -91,66 +82,54 @@ class TUM(nn.Module):
         self.smooth = nn.Sequential(*smooth)
 
     def forward(self, x):
-        print("ENCODER")
-        print(x.shape)
         encoder_output = [x]
         for i in range(len(self.encoder)):
             x = self.encoder[i](x)
-            print(i, x.shape)
             encoder_output.append(x)
 
         encoder_output.reverse()
 
-        print("DECODER")
         result = []
         for idx, j in enumerate(encoder_output):
-            print(idx, j.shape)
             if idx == 0:
                 decoder_output = self.decoder[idx](j)
-                print(idx, decoder_output.shape)
                 result.append(self.smooth[idx](j))
-                print(idx, result[idx].shape)
             elif idx == 5:
                 y = upsample_add(j, decoder_output)
-                print(idx, y.shape)
                 result.append(self.smooth[idx](y))
-                print(idx, result[idx].shape)
             else:
                 y = upsample_add(j, decoder_output)
-                print(idx, y.shape)
                 decoder_output = self.decoder[idx](y)
-                print(idx, decoder_output.shape)
                 result.append(self.smooth[idx](y))
-                print(idx, result[idx].shape)
 
         return result
 
 
 class SFAM(nn.Module):
-    def __init__(self, channel=256, reduction=16):
+    def __init__(self, channel=256, num_level=8, num_scales=6, reduction=16):
         super(SFAM, self).__init__()
         # SEBlock
+        self.channel = channel * num_level
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid(),
-        )
+        self.fc1 = nn.ModuleList([nn.Conv2d(self.channel, self.channel // reduction, 1, 1, 0)] * num_scales)
+        self.relu = nn.ReLU(inplace=True)
+        self.fc2 = nn.ModuleList([nn.Conv2d(self.channel // reduction, self.channel, 1, 1, 0)] * num_scales)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        output = []
-        print(type(x))
+        outputs = []
         for i in range(len(x[0])):
-            for j in range(len(x)):
-                output.append(torch.cat(x[j][i]))
+            outputs.append(torch.cat([x[j][i] for j in range(len(x))], 1))
 
         result = []
-        for i in output:
-            b, c, _, _ = i.size()
-            y = self.avg_pool(i).view(b, c)
-            y = self.fc(y).view(b, c, 1, 1)
-            result.append(y)
+        for idx, output in enumerate(outputs):
+            print(output.shape)
+            y = self.avg_pool(output)
+            y = self.fc1[idx](y)
+            y = self.relu(y)
+            y = self.fc2[idx](y)
+            y = self.sigmoid(y)
+            result.append(output * y)
 
         return result
 
