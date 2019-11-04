@@ -106,7 +106,7 @@ class TUM(nn.Module):
 
 
 class SFAM(nn.Module):
-    def __init__(self, channel=256, num_level=8, num_scales=6, reduction=16):
+    def __init__(self, channel=128, num_level=8, num_scales=6, reduction=64):
         super(SFAM, self).__init__()
         # SEBlock
         self.channel = channel * num_level
@@ -123,7 +123,6 @@ class SFAM(nn.Module):
 
         result = []
         for idx, output in enumerate(outputs):
-            print(output.shape)
             y = self.avg_pool(output)
             y = self.fc1[idx](y)
             y = self.relu(y)
@@ -177,12 +176,9 @@ class M2Det(BaseModel):
         loc_ = list()
         conf_ = list()
         for i in range(self.num_scales):
-            loc_.append(nn.Conv2d(self.planes * self.num_levels,
-                                  4 * 6,  # 4 is coordinates, 6 is anchors for each pixels,
-                                  3, 1, 1))
-            conf_.append(nn.Conv2d(self.planes * self.num_levels,
-                                   self.num_classes * 6,  # 6 is anchors for each pixels,
-                                   3, 1, 1))
+            loc_.append(nn.Conv2d(1024, 32, 3, 1, 1))
+            conf_.append(nn.Conv2d(1024, self.num_classes * 6, 3, 1, 1))
+
         self.loc = nn.ModuleList(loc_)
         self.conf = nn.ModuleList(conf_)
 
