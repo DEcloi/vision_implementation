@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
+from model.detect import Detect
+from model.priors import PriorBox
 from base import BaseModel
 
 
@@ -183,6 +185,9 @@ class M2Det(BaseModel):
         self.conf = nn.ModuleList(conf_)
 
     def forward(self, x):
+        size = x.size()[2:]
+        print(size)
+
         # Backbone network
         base_feats = list()
         # print(len(self.layer))
@@ -224,15 +229,27 @@ class M2Det(BaseModel):
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
 
+        # feat_maps = []
+        # for i in range(len(loc)):
+        #     feat = []
+        #     feat += [loc[i].size(1), loc[i].size(2)]
+        #     feat_maps += [feat]
+
+        prior_box = PriorBox(size, loc)
+        with torch.no_grad():
+            priors = prior_box.forward().cuda()
+
         if self.phase == "test":
             output = (
                 loc.view(loc.size(0), -1, 4),  # loc preds
                 self.softmax(conf.view(-1, self.num_classes)),  # conf preds
+                priors.type(type(x.data))
             )
         else:
             output = (
                 loc.view(loc.size(0), -1, 4),
                 conf.view(conf.size(0), -1, self.num_classes),
+                priors
             )
 
         return output
