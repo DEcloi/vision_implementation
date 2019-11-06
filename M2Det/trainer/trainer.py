@@ -39,6 +39,10 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
+        total_loss = 0
+        total_cls_loss = 0
+        total_reg_loss = 0
+
         self.model.train()
         self.train_metrics.reset()
         print(self.device)
@@ -60,14 +64,19 @@ class Trainer(BaseTrainer):
             # -------- TRAINING LOOP --------
             self.optimizer.zero_grad()
             output = self.model(image)
-            loss = self.criterion(output, target)
+            reg_loss, cls_loss = self.criterion(output, target)
+            loss = reg_loss + cls_loss
             loss.backward()
             self.optimizer.step()
             # -------------------------------
 
-            self.train_metrics.update('loss', loss.item())
-            for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+            total_loss += loss.item()
+            total_cls_loss += cls_loss.item()
+            total_reg_loss += reg_loss.item()
+
+            # self.train_metrics.update('loss', loss.item())
+            # for met in self.metric_ftns:
+            #     self.train_metrics.update(met.__name__, met(output, target))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
@@ -86,7 +95,10 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
-        log.update({'lr': lr})
+        log.update({'lr': lr,
+                    'loss': total_loss / self.len_epoch,
+                    'cls_loss': total_cls_loss / self.len_epoch,
+                    'reg_loss': total_reg_loss / self.len_epoch,})
 
         # Add log to WandB
         if not self.config['debug']:
