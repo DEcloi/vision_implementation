@@ -40,7 +40,7 @@ def _loss(predictions, targets):
     num = loc_data.size(0)
     priors = priors[:loc_data.size(1), :]
     num_priors = (priors.size(0))
-    num_classes = 2
+    num_classes = 10
     negpos_ratio = 3
     threshold = [0.1, 0.35, 0.5]
     variance = [0.1, 0.2]
