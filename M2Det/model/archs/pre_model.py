@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -178,15 +179,18 @@ class M2Det(BaseModel):
         loc_ = list()
         conf_ = list()
         for i in range(self.num_scales):
-            loc_.append(nn.Conv2d(1024, 32, 3, 1, 1))
-            conf_.append(nn.Conv2d(1024, self.num_classes * 6, 3, 1, 1))
+            loc_.append(nn.Conv2d(1024, 4, 3, 1, 1))
+            conf_.append(nn.Conv2d(1024, self.num_classes, 3, 1, 1))
+
+        if self.phase == 'test':
+            self.softmax = nn.Softmax(dim=-1)
+            self.detect = Detect(num_classes=num_classes, top_k=750, nms_thresh=0.3, nms_top_k=5000, conf_thresh=0.05, variance=[0.1, 0.2])
 
         self.loc = nn.ModuleList(loc_)
         self.conf = nn.ModuleList(conf_)
 
     def forward(self, x):
         size = x.size()[2:]
-        print(size)
 
         # Backbone network
         base_feats = list()
@@ -226,30 +230,34 @@ class M2Det(BaseModel):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
 
-        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
-        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+        feat_maps = []
+        for i in range(len(loc)):
+            feat = []
+            feat += [loc[i].size(1), loc[i].size(2)]
+            feat_maps += [feat]
 
-        # feat_maps = []
-        # for i in range(len(loc)):
-        #     feat = []
-        #     feat += [loc[i].size(1), loc[i].size(2)]
-        #     feat_maps += [feat]
+        # reg_layer_size = []
+        # for i in range(self.num_scales + 1):
+        #     size = math.ceil(320 / 2.)
+        #     if i >= 2:
+        #         reg_layer_size += [size]
+        #         if i == self.num_scales and 2 != 0:
+        #             reg_layer_size += [320 - 2]
 
-        prior_box = PriorBox(size, loc)
+        prior_box = PriorBox(size, feat_maps)
         with torch.no_grad():
             priors = prior_box.forward().cuda()
 
+        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
+        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+
         if self.phase == "test":
-            output = (
-                loc.view(loc.size(0), -1, 4),  # loc preds
-                self.softmax(conf.view(-1, self.num_classes)),  # conf preds
-                priors.type(type(x.data))
-            )
+            output = self.detect(loc.view(loc.size(0), -1, 4),
+                                 self.softmax(conf.view(conf.size(0), -1, self.num_classes)),
+                                 priors.type(type(x.data)))
         else:
-            output = (
-                loc.view(loc.size(0), -1, 4),
-                conf.view(conf.size(0), -1, self.num_classes),
-                priors
-            )
+            output = (loc.view(loc.size(0), -1, 4),
+                      conf.view(conf.size(0), -1, self.num_classes),
+                      priors)
 
         return output
