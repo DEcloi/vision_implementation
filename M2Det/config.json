@@ -36,10 +36,10 @@
         }
     },
 
-    "loss": "nll_loss",
+    "loss": "_loss",
 
     "metrics": [
-        "accuracy", "top_k_acc"
+        "calculate_AP", "iou"
     ],
 
     "lr_scheduler": {
