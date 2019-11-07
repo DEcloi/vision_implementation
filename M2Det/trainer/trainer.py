@@ -45,7 +45,6 @@ class Trainer(BaseTrainer):
 
         self.model.train()
         self.train_metrics.reset()
-        print(self.device)
         for batch_idx, data in enumerate(self.data_loader):
             # image, target = Variable(data['data'].float().cuda()), Variable(data['bbox'].float().cuda())
             # print(type(data['data']))
@@ -86,7 +85,20 @@ class Trainer(BaseTrainer):
 
             if batch_idx == self.len_epoch:
                 break
-        log = self.train_metrics.result()
+
+            # log = self.train_metrics.result()
+            wandb_log = {'loss': loss.item(),
+                         'cls_loss': cls_loss.item(),
+                         'reg_loss': reg_loss.item()}
+
+            # Add log to WandB
+            if not self.config['debug']:
+                wandb.log(wandb_log)
+
+        # log = self.train_metrics.result()
+        log = {'loss': total_loss / self.len_epoch,
+               'cls_loss': total_cls_loss / self.len_epoch,
+               'reg_loss': total_reg_loss / self.len_epoch}
 
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
@@ -95,14 +107,7 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
-        log.update({'lr': lr,
-                    'loss': total_loss / self.len_epoch,
-                    'cls_loss': total_cls_loss / self.len_epoch,
-                    'reg_loss': total_reg_loss / self.len_epoch,})
-
-        # Add log to WandB
-        if not self.config['debug']:
-            wandb.log(log)
+        log.update({'lr': lr})
 
         return log
 
