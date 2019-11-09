@@ -4,9 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
+from base import BaseModel
 from model.detect import Detect
 from model.priors import PriorBox
-from base import BaseModel
+from model.activation import Mish
 
 
 def upsample_add(x, y, fuse_type='interp'):
@@ -23,12 +24,12 @@ class Conv(nn.Module):
         self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
                               padding=padding, dilation=dilation, groups=groups, bias=bias)
         self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True)
-        self.relu = nn.ReLU(inplace=True)
+        self.mish = Mish()
 
     def forward(self, x):
         x = self.conv(x)
         x = self.bn(x)
-        x = self.relu(x)
+        x = self.mish(x)
 
         return x
 
